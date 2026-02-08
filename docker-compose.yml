@@ -129,6 +129,26 @@ services:
       green-network:
         ipv4_address: 10.40.0.6
 
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./grafana:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+
+    networks:
+      green-network:
+        ipv4_address: 10.40.0.13
+
+volumes:
+  grafana:
+  influxdb:
+
+
 
 networks:
   green-network:
