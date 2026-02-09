@@ -75,7 +75,13 @@ def exec_structural_balance():
 
             reserve_slot(slot_end,bike_id,station_id_end)
 
-        # avverte l'operatore
+        # notifies operator
+            event_description = f"Move bike {bike_id} from station {station_id_start} slot {slot_start} to station {station_id_end} slot {slot_end}"
+            point = Point("event") \
+                .field("description", event_description)
+            write_api.write(bucket=bucket, record=point)
+
+        # message for operator simulation
             payload = {
                 "request": "MOVE",
                 "station_id_start": station_id_start,
@@ -108,6 +114,12 @@ def exec_bikes_availability():
                     slot = record.values.get("slot")
 
                     reserve_slot(slot, bike_id, station_id)
+
+                    #notifyies the operator
+                    event_description = f"Put bike {bike_id} in charge at station {station_id} slot {slot}"
+                    point = Point("event") \
+                        .field("description", event_description)
+                    write_api.write(bucket=bucket, record=point)
 
                     # avverte l'operatore
                     payload = {

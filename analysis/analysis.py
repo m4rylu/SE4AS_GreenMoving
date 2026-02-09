@@ -105,9 +105,9 @@ def bike_availability_goal():
 
             # verifico zona
             if not (42.3866 > lat > 42.3273) or not (13.4287 > lon > 13.3306):
-                point = Point("bike_availability") \
-                    .tag("bike_id", bike_id) \
-                    .field("event", "OUT_OF_BOUNDS")
+                event_description = f"Out of bounds alarm for bike {bike_id}"
+                point = Point("event") \
+                    .field("description", event_description)
                 write_api.write(bucket=bucket, record=point)
 
             # verifico bici disponibile per prenotazione
@@ -120,20 +120,23 @@ def bike_availability_goal():
                 write_api.write(bucket=bucket, record=point)
 
             # verifico furto
+            if bike_id not in bikes_history:
+                print(f"Monitoraggio avviato per {bike_id}. Posizione iniziale salvata.")
+                bikes_history[bike_id] = {'lat': lat, 'lon': lon}
+                continue
+
             if is_available and not is_charging and locked:
-                if bike_id in bikes_history:
-                    old_pos = bikes_history[bike_id]
-                    # Calcoliamo quanto si è spostata
-                    diff_lat = abs(lat - old_pos['lat'])
-                    diff_lon = abs(lon - old_pos['lon'])
+                old_pos = bikes_history[bike_id]
+                # Calcoliamo quanto si è spostata
+                diff_lat = abs(lat - old_pos['lat'])
+                diff_lon = abs(lon - old_pos['lon'])
 
-                    if locked and (diff_lat > SOGLIA_MOVIMENTO or diff_lon > SOGLIA_MOVIMENTO):
-                        point = Point("bike_availability") \
-                            .tag("bike_id", bike_id) \
-                            .field("event", "THEFT_ALARM")
-                        write_api.write(bucket=bucket, record=point)
-                        print(f"!!! POSSIBILE FURTO BICI {bike_id} !!!")
-
+                if diff_lat > SOGLIA_MOVIMENTO or diff_lon > SOGLIA_MOVIMENTO:
+                    event_description = f"Theft alarm for Bike {bike_id}"
+                    point = Point("event") \
+                        .field("description", event_description)
+                    write_api.write(bucket=bucket, record=point)
+                    print(f"!!! POSSIBILE FURTO BICI {bike_id} !!!")
 
             bikes_history[bike_id] = {'lat': lat, 'lon': lon}
 
