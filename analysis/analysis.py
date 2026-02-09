@@ -1,19 +1,20 @@
 import time
+import configparser
 from datetime import timezone, datetime
-
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 
+config = configparser.ConfigParser()
+config.read('configuration/config.ini')
 
-#rendere l'analisi sia time based che vent based
+TOKEN = config.get('influx_db', 'token')
+ORG = config.get('influx_db', 'org')
+BUCKET = config.get('influx_db', 'bucket')
+URL = config.get('influx_db', 'url')
 
-# --- Configurazione ---
-token = "9UAPy4qDu16TQSUe4G9EN88rzsnC1srqrhgwu4Kxg9asMCxLdkCq_NgZzUp2gpnAfSj5W-XTzjeIUEsA23CiIw=="
-org = "GreenMoving"
-bucket = "bike_monitoring"
-url = "http://influxdb:8086"
-
-SOGLIA_MOVIMENTO=0.0001
+BIKE_MOVEMENT_TRESHOLD = config.getfloat('system', 'bike_movement_threshold')
+N_SLOT = config.getint('system', 'n_slot_x_station')
+UPDATE_RATE = config.getint('system', 'analysis_update_rate')
 
 stations={}
 bikes_history={}
@@ -21,7 +22,7 @@ last_processed_time_s = datetime.fromtimestamp(0, timezone.utc)
 
 time.sleep(10)
 
-client = InfluxDBClient(url=url, token=token, org=org)
+client = InfluxDBClient(url=URL, token=TOKEN, org=ORG)
 query_api = client.query_api()
 write_api = client.write_api(write_options=SYNCHRONOUS)
 
@@ -29,14 +30,14 @@ write_api = client.write_api(write_options=SYNCHRONOUS)
 def structural_balance_goal():
     global last_processed_time_s
     flux_query_stations = f'''
-    from(bucket: "{bucket}")
+    from(bucket: "{BUCKET}")
       |> range(start: -30d)
       |> filter(fn: (r) => r["_measurement"] == "station")
       |> last()
       |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
     '''
     # STATION ANALYSIS
-    tables = query_api.query(query=flux_query_stations, org=org)
+    tables = query_api.query(query=flux_query_stations, org=ORG)
     for table in tables:
         for record in table.records:
             print("last_record", last_processed_time_s)
@@ -44,7 +45,7 @@ def structural_balance_goal():
             if record.get_time() > last_processed_time_s:
                 station_id = record.values.get("station_id")
                 slots = {}
-                for i in range(1, 6):
+                for i in range(1, N_SLOT+1):
                     slots[f"slot{i}"] = (record.values.get(f"slot{i}"), record.values.get(f"slot{i}_rate"))
 
                 # Logica degli stati
@@ -63,27 +64,27 @@ def structural_balance_goal():
                     point = Point("structural_balance") \
                         .tag("station_id", station_id) \
                         .field("event_type", event_msg)
-                    write_api.write(bucket=bucket, record=point)
+                    write_api.write(bucket=BUCKET, record=point)
                     print(f"[ANALYSIS] Rilevato stato {event_msg} per stazione {station_id}. Evento inviato.")
 
                 point = Point("energy_waste") \
                     .tag("station_id", station_id) \
                     .field("event_type", "UPDATED")
 
-                write_api.write(bucket=bucket, record=point)
+                write_api.write(bucket=BUCKET, record=point)
 
                 last_processed_time_s = record.get_time()
 
 def bike_availability_goal():
     flux_query_bikes = f'''
-    from(bucket: "{bucket}")
+    from(bucket: "{BUCKET}")
       |> range(start: -30d)
       |> filter(fn: (r) => r["_measurement"] == "bikes")
       |> last()
       |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
     '''
     # BIKES ANALYSIS
-    tables = query_api.query(query=flux_query_bikes, org=org)
+    tables = query_api.query(query=flux_query_bikes, org=ORG)
     for table in tables:
         for record in table.records:
             bike_id = record.values.get("bike_id")
@@ -100,7 +101,7 @@ def bike_availability_goal():
                 point = Point("bike_availability") \
                     .tag("bike_id", bike_id) \
                     .field("event", "LOW_BATTERY")
-                write_api.write(bucket=bucket, record=point)
+                write_api.write(bucket=BUCKET, record=point)
 
 
             # verifico zona
@@ -108,7 +109,7 @@ def bike_availability_goal():
                 event_description = f"Out of bounds alarm for bike {bike_id}"
                 point = Point("event") \
                     .field("description", event_description)
-                write_api.write(bucket=bucket, record=point)
+                write_api.write(bucket=BUCKET, record=point)
 
             # verifico bici disponibile per prenotazione
             #if battery > 50 and is_available:
@@ -117,7 +118,7 @@ def bike_availability_goal():
                 point = Point("bike_availability") \
                     .tag("bike_id", bike_id) \
                     .field("event", "FULLY_CHARGED")
-                write_api.write(bucket=bucket, record=point)
+                write_api.write(bucket=BUCKET, record=point)
 
             # verifico furto
             if bike_id not in bikes_history:
@@ -131,15 +132,14 @@ def bike_availability_goal():
                 diff_lat = abs(lat - old_pos['lat'])
                 diff_lon = abs(lon - old_pos['lon'])
 
-                if diff_lat > SOGLIA_MOVIMENTO or diff_lon > SOGLIA_MOVIMENTO:
+                if diff_lat > BIKE_MOVEMENT_TRESHOLD or diff_lon > BIKE_MOVEMENT_TRESHOLD:
                     event_description = f"Theft alarm for Bike {bike_id}"
                     point = Point("event") \
                         .field("description", event_description)
-                    write_api.write(bucket=bucket, record=point)
+                    write_api.write(bucket=BUCKET, record=point)
                     print(f"!!! POSSIBILE FURTO BICI {bike_id} !!!")
 
             bikes_history[bike_id] = {'lat': lat, 'lon': lon}
-
 
 
 def do_analysis():
@@ -150,4 +150,4 @@ def do_analysis():
 
 while True:
     do_analysis()
-    time.sleep(10)
+    time.sleep(UPDATE_RATE)

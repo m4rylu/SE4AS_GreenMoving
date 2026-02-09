@@ -1,3 +1,4 @@
+import configparser
 import paho.mqtt.client as mqtt
 import json
 import time
@@ -6,22 +7,30 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 
 # --- Configurazione ---
 
-token = "9UAPy4qDu16TQSUe4G9EN88rzsnC1srqrhgwu4Kxg9asMCxLdkCq_NgZzUp2gpnAfSj5W-XTzjeIUEsA23CiIw=="
-org = "GreenMoving"
-bucket = "bike_monitoring"
-url = "http://influxdb:8086"
+config = configparser.ConfigParser()
+config.read('configuration/config.ini')
 
-bike_topic = "ebike/bikes/+/telemetry"
-bike_command_topic = "ebike/bikes/+/commands"
-station_topic = "ebike/stations/+/slots"
-station_command_topic = "ebike/stations/+/request"
-station_events = "ebike/stations/+/events"
+UPDATE_RATE = config.getint('system', 'monitor_update_rate')
+
+TOKEN = config.get('influx_db', 'token')
+ORG = config.get('influx_db', 'org')
+BUCKET = config.get('influx_db', 'bucket')
+URL = config.get('influx_db', 'url')
+
+HOST = config.get('mqtt', 'host')
+PORT = config.getint('mqtt', 'port')
+
+BIKE_TOPIC = config.get('mqtt_topics', 'bike_topic')
+BIKE_COMMAND_TOPIC = config.get('mqtt_topics', 'bike_command_topic')
+STATION_TOPIC = config.get('mqtt_topics', 'station_topic')
+STATION_COMMAND_TOPIC = config.get('mqtt_topics', 'station_command_topic')
+STATION_EVENTS = config.get('mqtt_topics', 'station_events')
 
 bikes = {}
 stations = {}
 
 time.sleep(5)
-client_db = InfluxDBClient(url=url, token=token, org=org)
+client_db = InfluxDBClient(url=URL, token=TOKEN, org=ORG)
 write_api = client_db.write_api(write_options=SYNCHRONOUS)
 
 def send_data_bikes():
@@ -37,7 +46,7 @@ def send_data_bikes():
                 .field("lat", bikes[bike]["lat"]) \
                 .field("lon", bikes[bike]["lon"])
 
-            write_api.write(bucket=bucket, record=point)
+            write_api.write(bucket=BUCKET, record=point)
 
 
 def send_station_data():
@@ -57,12 +66,12 @@ def send_station_data():
             .field("slot5", stations[station]["slot5"][0]) \
             .field("slot5_rate", stations[station]["slot5"][1] ) \
 
-            write_api.write(bucket=bucket, record=point)
+            write_api.write(bucket=BUCKET, record=point)
 
 def on_connect(client, userdata, flags, rc, properties=None):
     print("Connected with result code "+str(rc))
-    client.subscribe(bike_topic)
-    client.subscribe(station_topic)
+    client.subscribe(BIKE_TOPIC)
+    client.subscribe(STATION_TOPIC)
 
 def on_message(client, userdata, msg):
     payload = json.loads(msg.payload.decode())
@@ -81,10 +90,9 @@ def on_message(client, userdata, msg):
 client = mqtt.Client(client_id="Monitor")
 client.on_connect = on_connect
 client.on_message = on_message
-client.connect("mqtt-broker", 1883, 60)
+client.connect(HOST, PORT, 60)
 client.loop_start()
 
 while True:
     send_data_bikes()
-
-    time.sleep(10)
+    time.sleep(UPDATE_RATE)

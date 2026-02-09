@@ -1,15 +1,20 @@
-from datetime import datetime, timezone
 import time
-
+import configparser
+from datetime import datetime, timezone
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 
-# --- Configurazione ---
-token = "9UAPy4qDu16TQSUe4G9EN88rzsnC1srqrhgwu4Kxg9asMCxLdkCq_NgZzUp2gpnAfSj5W-XTzjeIUEsA23CiIw=="
-org = "GreenMoving"
-bucket = "bike_monitoring"
-url = "http://influxdb:8086"
-num_slot=5
+config = configparser.ConfigParser()
+config.read('configuration/config.ini')
+
+TOKEN = config.get('influx_db', 'token')
+ORG = config.get('influx_db', 'org')
+BUCKET = config.get('influx_db', 'bucket')
+URL = config.get('influx_db', 'url')
+
+N_SLOT = config.getint('system', 'n_slot_x_station')
+RESET_TASK_TIME = config.getint('system', 'reset_task_time')
+UPDATE_RATE = config.getint('system', 'planning_update_rate')
 
 stations={}
 station_knowledge={}
@@ -23,13 +28,12 @@ bikes = {}
 
 time.sleep(25)
 
-client = InfluxDBClient(url=url, token=token, org=org)
+client = InfluxDBClient(url=URL, token=TOKEN, org=ORG)
 query_api = client.query_api()
 write_api = client.write_api(write_options=SYNCHRONOUS)
 
 
 def plan_energy_waste(station_id):
-    TOTAL_POWER = 50.0  # Unità di energia totali per stazione (es. Ampere)
     charging_list = []
     charged_list = []
 
@@ -93,26 +97,26 @@ def plan_energy_waste(station_id):
                 .field("rate", rates[rate][0]) \
                 .field("bike_id", rates[rate][1])
 
-            write_api.write(bucket=bucket, record=point)
+            write_api.write(bucket=BUCKET, record=point)
 
 
 def clean_old_tasks():
     now = time.time()
     for sid, task in list(active_tasks.items()):
         # Se il task è più vecchio di 15 minuti, lo consideriamo scaduto o fallito
-        if now - task["timestamp"] > 300:
+        if now - task["timestamp"] > RESET_TASK_TIME:
             del active_tasks[sid]
 
 def retrieve_station_knowledge():
     flux_query_station_loc = f'''
-    from(bucket: "{bucket}")
+    from(bucket: "{BUCKET}")
     |> range(start: -5m)
     |> filter(fn: (r) => r["_measurement"] == "station_knowledge")
     |> last()
     |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
     '''
 
-    tables = query_api.query(query=flux_query_station_loc, org=org)
+    tables = query_api.query(query=flux_query_station_loc, org=ORG)
     for table in tables:
         for record in table.records:
             station_id = record.values.get("station_id")
@@ -132,13 +136,13 @@ def find_best_station(station_id, empty):
         # FULL: Cerco stazioni con ALMENO metà dei posti liberi (safe)
         safe_destinations = [
             sid for sid in stations
-            if sid != station_id and count_empty(sid) >= num_slot // 2
+            if sid != station_id and count_empty(sid) >= N_SLOT // 2
         ]
     else:
         # EMPTY: Cerco stazioni con ALMENO metà dei posti occupati (per rubare una bici)
         safe_destinations = [
             sid for sid in stations
-            if sid != station_id and count_empty(sid) <= num_slot // 2
+            if sid != station_id and count_empty(sid) <= N_SLOT // 2
         ]
 
     if not safe_destinations:
@@ -185,7 +189,7 @@ def find_bike_location(bike_id):
 
 def retrieve_data_station():
     flux_query_stations = f'''
-    from(bucket: "{bucket}")
+    from(bucket: "{BUCKET}")
       |> range(start: -5m)
       |> filter(fn: (r) => r["_measurement"] == "station")
       |> last()
@@ -193,24 +197,24 @@ def retrieve_data_station():
     '''
 
     # STATION DATA RETRIEVING
-    tables = query_api.query(query=flux_query_stations, org=org)
+    tables = query_api.query(query=flux_query_stations, org=ORG)
     for table in tables:
         for record in table.records:
             station_id = record.values.get("station_id")
             stations[station_id] = {}
-            for i in range(1, num_slot+1):
+            for i in range(1, N_SLOT+1):
                 stations[station_id][f"slot{i}"] = (record.values.get(f"slot{i}"), record.values.get(f"slot{i}_rate"))
 
 
 def retrieve_data_bike():
     flux_query_bikes = f'''
-    from(bucket: "{bucket}")
+    from(bucket: "{BUCKET}")
     |> range(start: -5m)
     |> filter(fn: (r) => r["_measurement"] == "bikes")
     |> last()
     |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
 '''
-    tables = query_api.query(query=flux_query_bikes, org=org)
+    tables = query_api.query(query=flux_query_bikes, org=ORG)
     for table in tables:
         for record in table.records:
             bike_id = record.values.get("bike_id")
@@ -221,7 +225,7 @@ def plan_bike_availability():
     global last_processed_time_b
 
     flux_query_event_bikes = f'''
-    from(bucket: "{bucket}")
+    from(bucket: "{BUCKET}")
       |> range(start: -5m)
       |> filter(fn: (r) => r["_measurement"] == "bike_availability")
       |> last()
@@ -229,7 +233,7 @@ def plan_bike_availability():
     '''
 
     # BIKE PLANNING
-    tables = query_api.query(query=flux_query_event_bikes, org=org)
+    tables = query_api.query(query=flux_query_event_bikes, org=ORG)
     if tables:
         for table in tables:
             for record in table.records:
@@ -253,7 +257,7 @@ def plan_bike_availability():
                                 .tag("bike_id", bike_id) \
                                 .field("station_id", stat) \
                                 .field("slot", sl)
-                            write_api.write(bucket=bucket, record=point)
+                            write_api.write(bucket=BUCKET, record=point)
                             print(f"Bici {bike_id} pronta per essere ricaricata a {stat} in slot {sl}")
                             stations[stat][sl]=("RESERVED",0)
 
@@ -282,14 +286,14 @@ def plan_structural_balance():
     global last_processed_time_s
 
     flux_query_event_station = f'''
-    from(bucket: "{bucket}")
+    from(bucket: "{BUCKET}")
       |> range(start: -5m)
       |> filter(fn: (r) => r["_measurement"] == "structural_balance")
       |> last()
       |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
     '''
     # STATION PLANNING
-    tables = query_api.query(query=flux_query_event_station, org=org)
+    tables = query_api.query(query=flux_query_event_station, org=ORG)
     if tables:
         record = tables[0].records[0]
         if record.get_time() > last_processed_time_s:
@@ -330,7 +334,7 @@ def plan_structural_balance():
                                 .field("slot_start", bike_to_move[1]) \
                                 .field("station_id_end", target_station) \
                                 .field("slot_end", target_slot)
-                            write_api.write(bucket=bucket, record=point)
+                            write_api.write(bucket=BUCKET, record=point)
                             active_tasks[station_id] = {
                                 "type": "STATIONS_REBALANCING",
                                 "timestamp": time.time()
@@ -370,7 +374,7 @@ def plan_structural_balance():
                                 .field("slot_start", target_slot) \
                                 .field("station_id_end", station_id) \
                                 .field("slot_end", slot)
-                            write_api.write(bucket=bucket, record=point)
+                            write_api.write(bucket=BUCKET, record=point)
                             active_tasks[station_id] = {
                                 "type": "STATIONS_REBALANCING",
                                 "timestamp": time.time()
@@ -378,18 +382,17 @@ def plan_structural_balance():
                             break
 
 
-
 def retrieve_energy_waste_data():
     global last_processed_time_w
     flux_query_energy_waste = f'''
-        from(bucket: "{bucket}")
+        from(bucket: "{BUCKET}")
           |> range(start: -5m)
           |> filter(fn: (r) => r["_measurement"] == "energy_waste")
           |> last()
           |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
         '''
     # STATION PLANNING
-    tables = query_api.query(query=flux_query_energy_waste, org=org)
+    tables = query_api.query(query=flux_query_energy_waste, org=ORG)
     if tables:
         for table in tables:
             for record in table.records:
@@ -412,4 +415,4 @@ def do_planning():
 retrieve_station_knowledge()
 while True:
     do_planning()
-    time.sleep(10)
+    time.sleep(UPDATE_RATE)

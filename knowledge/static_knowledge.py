@@ -1,29 +1,35 @@
 import time
+import configparser
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 
-# --- Configurazione ---
-token = "9UAPy4qDu16TQSUe4G9EN88rzsnC1srqrhgwu4Kxg9asMCxLdkCq_NgZzUp2gpnAfSj5W-XTzjeIUEsA23CiIw=="
-org = "GreenMoving"
-bucket = "bike_monitoring"
-url = "http://influxdb:8086"
+config = configparser.ConfigParser()
+config.read('configuration/config.ini')
+
+TOKEN = config.get('influx_db', 'token')
+ORG = config.get('influx_db', 'org')
+BUCKET = config.get('influx_db', 'bucket')
+URL = config.get('influx_db', 'url')
 
 stations={}
 bikes_history={}
 
 time.sleep(5)
 
-client = InfluxDBClient(url=url, token=token, org=org)
+client = InfluxDBClient(url=URL, token=TOKEN, org=ORG)
 write_api = client.write_api(write_options=SYNCHRONOUS)
 
-static_knowledge = {
-  "S1": {"lat": 42.3540, "lon": 13.3910, "address": "Piazza Duomo", "total_power":50},
-  "S2": {"lat": 42.3512, "lon": 13.4012, "address": "Stazione Centrale", "total_power":50}
-  #"S3": {"lat": 42.3600, "lon": 13.3850, "address": "Polo Universitario", "total_power":50}
-}
+static_knowledge = {}
+for section in config.sections():
+    if section.startswith('S'):
+        static_knowledge[section] = {
+            "lat": config.getfloat(section, 'lat'),
+            "lon": config.getfloat(section, 'lon'),
+            "address": config.get(section, 'address'),
+            "total_power": config.getint(section, 'total_power')
+        }
 
 for station in static_knowledge:
-
     point = Point("station_knowledge") \
                 .tag("station_id", station) \
                 .field("lat", static_knowledge[station]["lat"]) \
@@ -31,7 +37,7 @@ for station in static_knowledge:
                 .field("address", static_knowledge[station]["address"]) \
                 .field("total_power", static_knowledge[station]["total_power"])
 
-    write_api.write(bucket=bucket, record=point)
+    write_api.write(bucket=BUCKET, record=point)
 
 
 
