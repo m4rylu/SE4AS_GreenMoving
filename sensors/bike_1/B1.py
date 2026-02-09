@@ -1,17 +1,20 @@
 import time
-
-import paho.mqtt.client as mqtt
+import configparser
 import random
 import json
+import paho.mqtt.client as mqtt
 
-# utente vede bici 1 15% e slot 1 libero ->
-# - bici vai in carica in slot 1
-# - slot 1 occupato da bici 1
+config = configparser.ConfigParser()
+config.read('configuration/config.ini')
 
-# --- CONFIGURAZIONE ---
-# Lista di stazioni: (ID, Lat, Lon)
-BROKER = "mqtt-broker"
+HOST = config.get('mqtt', 'host')
+PORT = config.getint('mqtt', 'port')
+UPDATE_RATE = config.getfloat('system', 'bikes_update_rate')
 
+config_b = configparser.ConfigParser()
+config_b.read('config.ini')
+
+BIKE_ID = config_b.get('bikes','id')
 
 class Bike:
     def __init__(self, bike_id):
@@ -31,7 +34,7 @@ class Bike:
         self.client = mqtt.Client(client_id=self.id)
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
-        self.client.connect(BROKER, 1883, 60)
+        self.client.connect(HOST, PORT, 60)
         self.client.loop_start()
 
 
@@ -100,8 +103,8 @@ class Bike:
 
 
 if __name__ == "__main__":
-    bike = Bike("B1")
+    bike = Bike(BIKE_ID)
 
     while True:
         bike.update_state()
-        time.sleep(10)
+        time.sleep(UPDATE_RATE)

@@ -131,7 +131,7 @@
         "showHeader": true,
         "sortBy": [
           {
-            "desc": false,
+            "desc": true,
             "displayName": "Description"
           }
         ]
@@ -179,5 +179,5 @@
   "timezone": "browser",
   "title": "Log dashboard",
   "uid": "ad2tg8b",
-  "version": 3
+  "version": 4
 }

@@ -147,7 +147,7 @@ def do_analysis():
     structural_balance_goal()
 
 
-
-while True:
-    do_analysis()
-    time.sleep(UPDATE_RATE)
+if __name__ == "__main__":
+    while True:
+        do_analysis()
+        time.sleep(UPDATE_RATE)

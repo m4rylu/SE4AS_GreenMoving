@@ -411,8 +411,8 @@ def do_planning():
     plan_structural_balance()
     clean_old_tasks()
 
-
-retrieve_station_knowledge()
-while True:
-    do_planning()
-    time.sleep(UPDATE_RATE)
+if __name__ == "__main__":
+    retrieve_station_knowledge()
+    while True:
+        do_planning()
+        time.sleep(UPDATE_RATE)

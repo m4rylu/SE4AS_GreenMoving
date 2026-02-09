@@ -184,6 +184,7 @@ def execute():
     exec_energy_waste()
     exec_structural_balance()
 
-while True:
-    execute()
-    time.sleep(UPDATE_RATE)
+if __name__ == "__main__":
+    while True:
+        execute()
+        time.sleep(UPDATE_RATE)

@@ -7,6 +7,8 @@ services:
       - PYTHONUNBUFFERED=1
     depends_on:
       - mqtt-broker
+    volumes:
+      - ./configuration/config.ini:/app/configuration/config.ini
     networks:
       green-network:
         ipv4_address: 10.40.0.3
@@ -19,6 +21,8 @@ services:
       - PYTHONUNBUFFERED=1
     depends_on:
       - mqtt-broker
+    volumes:
+      - ./configuration/config.ini:/app/configuration/config.ini
     networks:
       green-network:
         ipv4_address: 10.40.0.12
@@ -30,6 +34,8 @@ services:
       - PYTHONUNBUFFERED=1
     depends_on:
       - mqtt-broker
+    volumes:
+      - ./configuration/config.ini:/app/configuration/config.ini
     networks:
       green-network:
         ipv4_address: 10.40.0.4
@@ -41,6 +47,8 @@ services:
       - PYTHONUNBUFFERED=1
     depends_on:
       - mqtt-broker
+    volumes:
+      - ./configuration/config.ini:/app/configuration/config.ini
     networks:
       green-network:
         ipv4_address: 10.40.0.11

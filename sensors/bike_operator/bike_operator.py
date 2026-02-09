@@ -1,30 +1,49 @@
-import paho.mqtt.client as mqtt
 import json
 import time
+import configparser
+import paho.mqtt.client as mqtt
 
-OP_ID = "OP1"
+config = configparser.ConfigParser()
+config.read('configuration/config.ini')
 
-bike_topic = "ebike/bikes/+/telemetry"
-bike_command_topic = "ebike/bikes/+/commands"
-station_topic = "ebike/stations/+/slots"
-station_command_topic = "ebike/stations/+/request"
-operator_topic = f"ebike/operators/events"
+UPDATE_RATE = config.getint('system', 'operator_update_rate')
+
+TOKEN = config.get('influx_db', 'token')
+ORG = config.get('influx_db', 'org')
+BUCKET = config.get('influx_db', 'bucket')
+URL = config.get('influx_db', 'url')
+
+HOST = config.get('mqtt', 'host')
+PORT = config.getint('mqtt', 'port')
+
+BIKE_TOPIC = config.get('mqtt_topics', 'bike_topic')
+BIKE_COMMAND_TOPIC = config.get('mqtt_topics', 'bike_command_topic')
+STATION_TOPIC = config.get('mqtt_topics', 'station_topic')
+STATION_COMMAND_TOPIC = config.get('mqtt_topics', 'station_command_topic')
+OPERATOR_TOPIC = config.get('mqtt_topics', 'operator_topic')
+
+config_s = configparser.ConfigParser()
+config_s.read('config.ini')
+
+OPERATOR_ID = config_s.get('operator','id')
 
 bikes = {}
 stations = {}
-station_loc = {
-  "S1": {"lat": 42.3540, "lon": 13.3910, "address": "Piazza Duomo"},
-  "S2": {"lat": 42.3512, "lon": 13.4012, "address": "Stazione Centrale"},
-  #"S3": {"lat": 42.3600, "lon": 13.3850, "address": "Polo Universitario"}
-}
-
-
+station_loc = {}
+for section in config.sections():
+    if section.startswith('S'):
+        station_loc[section] = {
+            "lat": config.getfloat(section, 'lat'),
+            "lon": config.getfloat(section, 'lon'),
+            "address": config.get(section, 'address'),
+            "total_power": config.getint(section, 'total_power')
+        }
 
 def on_connect(client, userdata, flags, rc, properties=None):
     print("Connected with result code "+str(rc))
-    client.subscribe(bike_topic)
-    client.subscribe(station_topic)
-    client.subscribe(operator_topic)
+    client.subscribe(BIKE_TOPIC)
+    client.subscribe(STATION_TOPIC)
+    client.subscribe(OPERATOR_TOPIC)
 
 def on_message(client, userdata, msg):
     payload = json.loads(msg.payload.decode())
@@ -100,14 +119,13 @@ def on_message(client, userdata, msg):
 
 
 
+if __name__ == "__main__":
+    client_mqtt = mqtt.Client(client_id="Operator1")
+    client_mqtt.on_connect = on_connect
+    client_mqtt.on_message = on_message
+    client_mqtt.connect(HOST, PORT, 60)
+    client_mqtt.loop_start()
 
-
-client_mqtt = mqtt.Client(client_id="Operator1")
-client_mqtt.on_connect = on_connect
-client_mqtt.on_message = on_message
-client_mqtt.connect("mqtt-broker", 1883, 60)
-client_mqtt.loop_start()
-
-while True:
-    time.sleep(10)
+    while True:
+        time.sleep(10)
 

@@ -5,8 +5,6 @@ import time
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 
-# --- Configurazione ---
-
 config = configparser.ConfigParser()
 config.read('configuration/config.ini')
 
@@ -86,13 +84,13 @@ def on_message(client, userdata, msg):
         stations[station_id] = ds
         send_station_data()
 
+if __name__ == "__main__":
+    client = mqtt.Client(client_id="Monitor")
+    client.on_connect = on_connect
+    client.on_message = on_message
+    client.connect(HOST, PORT, 60)
+    client.loop_start()
 
-client = mqtt.Client(client_id="Monitor")
-client.on_connect = on_connect
-client.on_message = on_message
-client.connect(HOST, PORT, 60)
-client.loop_start()
-
-while True:
-    send_data_bikes()
-    time.sleep(UPDATE_RATE)
+    while True:
+        send_data_bikes()
+        time.sleep(UPDATE_RATE)
