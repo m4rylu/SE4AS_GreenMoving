@@ -1,0 +1,15 @@
+apiVersion: 1
+
+datasources:
+  - name: "InfluxDB"
+    type: "influxdb"
+    access: "proxy"
+    url: "http://influxdb:8086"
+    jsonData:
+      version: "Flux"
+      organization: "GreenMoving"
+      defaultBucket: "bike_monitoring"
+      tlsSkipVerify: true
+    secureJsonData:
+      token: "9UAPy4qDu16TQSUe4G9EN88rzsnC1srqrhgwu4Kxg9asMCxLdkCq_NgZzUp2gpnAfSj5W-XTzjeIUEsA23CiIw=="
+    editable: true
