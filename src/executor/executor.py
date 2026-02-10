@@ -209,7 +209,7 @@ def execute():
     execute_bike_availability()
 
 if __name__ == "__main__":
-    time.sleep(5)
+    time.sleep(15)
 
     client_db = InfluxDBClient(url=URL, token=TOKEN, org=ORG)
     query_api = client_db.query_api()

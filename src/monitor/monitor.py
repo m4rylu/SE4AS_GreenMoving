@@ -81,8 +81,6 @@ def on_message(client, userdata, msg):
         send_station_data()
 
 if __name__ == "__main__":
-    time.sleep(5)
-
     client = mqtt.Client(client_id="Monitor")
     client.on_connect = on_connect
     client.on_message = on_message

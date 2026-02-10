@@ -8,5 +8,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY S2.py .
+COPY config.ini .
 
+# Comando per avviare lo script
 CMD ["python", "S2.py"]

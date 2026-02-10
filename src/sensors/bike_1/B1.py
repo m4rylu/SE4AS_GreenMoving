@@ -10,7 +10,9 @@ config.read('configuration/config.ini')
 
 HOST = config.get('mqtt', 'host')
 PORT = config.getint('mqtt', 'port')
+
 UPDATE_RATE = config.getfloat('update_rate', 'bikes_update_rate')
+BIKE_AVAILABILITY_TRESHOLD = config.getint('system', 'bike_availability_treshold')
 
 MAX_LAT = config.getfloat('coordinates', 'max_latitude')
 MIN_LAT = config.getfloat('coordinates', 'min_latitude')
@@ -26,12 +28,12 @@ class Bike:
     def __init__(self, bike_id):
         self.id = bike_id
         self.lat = round(random.uniform(MIN_LAT, MAX_LAT),4)
-        self.lon = round(random.uniform(MIN_LON,MAX_LAT),4)
+        self.lon = round(random.uniform(MIN_LON,MAX_LON),4)
         self.battery = random.randint(0, 10)
         self.motor_locked = True
         self.is_charging = False
         self.charge_rate = 0
-        self.is_available = True if self.battery > 10 else False
+        self.is_available = True if self.battery > BIKE_AVAILABILITY_TRESHOLD else False
 
         # Topic specifici
         self.telemetry_topic = f"ebike/bikes/{self.id}/telemetry"
@@ -80,7 +82,7 @@ class Bike:
             self.battery -= 3
             self.lat += random.uniform(-0.001, 0.001)
             self.lon += random.uniform(-0.001, 0.001)
-            if self.battery <= 10:
+            if self.battery <= BIKE_AVAILABILITY_TRESHOLD:
                 self.motor_locked = True
                 self.is_available = False
                 print("BATTERIA CRITICA: Blocco motore attivato")
@@ -96,7 +98,6 @@ class Bike:
             "battery": self.battery,
             "motor_locked": self.motor_locked,
             "is_charging": self.is_charging,
-            "charge_rate": self.charge_rate,
             "is_available": self.is_available,
             "lat": round(self.lat, 4),
             "lon": round(self.lon, 4)

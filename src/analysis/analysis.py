@@ -97,7 +97,7 @@ def bike_availability_goal():
 
 
             # verifico carica e disponibilità
-            if battery < AVAILABILITY_THRESHOLD and not is_charging:
+            if battery < AVAILABILITY_THRESHOLD and not is_charging and is_available:
                 point = Point("bike_recharging") \
                     .tag("bike_id", bike_id) \
                     .field("event", "LOW_BATTERY")
@@ -109,7 +109,7 @@ def bike_availability_goal():
                     .field("minutes", 0)
                 write_api.write(bucket=BUCKET, record=point)
 
-            elif battery >= AVAILABILITY_THRESHOLD:
+            elif battery >= AVAILABILITY_THRESHOLD and not is_available:
                 # stima max minuti disponibilità bici
                 available_minutes= int(battery*2.4)
                 point = Point("bike_availability") \

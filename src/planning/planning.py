@@ -65,8 +65,8 @@ def plan_energy_waste(station_id):
             priority_bike = charging_list[0]
             other_bikes = charging_list[1:]
 
-            p_power = total_p * 0.6
-            o_power = total_p * 0.4 / len(other_bikes)
+            p_power = int(total_p * 0.6)
+            o_power = int(total_p * 0.4 / len(other_bikes))
 
             #priority bike
             if stations[station_id][priority_bike["slot"]][1] != p_power:
@@ -183,10 +183,10 @@ def find_bike_location(bike_id):
 def retrieve_data_station():
     flux_query_stations = f'''
     from(bucket: "{BUCKET}")
-      |> range(start: -5m)
+      |> range(start: -1d)
       |> filter(fn: (r) => r["_measurement"] == "station")
       |> last()
-      |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+      |> pivot(rowKey:["_time","station_id"], columnKey: ["_field"], valueColumn: "_value")
     '''
 
     # STATION DATA RETRIEVING
@@ -399,7 +399,7 @@ def do_planning():
     clean_old_tasks()
 
 if __name__ == "__main__":
-    time.sleep(5)
+    time.sleep(10)
 
     client = InfluxDBClient(url=URL, token=TOKEN, org=ORG)
     query_api = client.query_api()

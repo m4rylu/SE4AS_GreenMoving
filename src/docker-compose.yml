@@ -27,6 +27,19 @@ services:
       green-network:
         ipv4_address: 10.40.0.12
 
+  station3:
+    build: ./sensors/station_3
+    container_name: station3
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - mqtt-broker
+    volumes:
+      - ./configuration/config.ini:/app/configuration/config.ini
+    networks:
+      green-network:
+        ipv4_address: 10.40.0.16
+
   bike1:
     build: ./sensors/bike_1
     container_name: bike1
@@ -39,6 +52,32 @@ services:
     networks:
       green-network:
         ipv4_address: 10.40.0.4
+
+  bike2:
+    build: ./sensors/bike_2
+    container_name: bike2
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - mqtt-broker
+    volumes:
+      - ./configuration/config.ini:/app/configuration/config.ini
+    networks:
+      green-network:
+        ipv4_address: 10.40.0.14
+
+  bike3:
+    build: ./sensors/bike_3
+    container_name: bike3
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - mqtt-broker
+    volumes:
+      - ./configuration/config.ini:/app/configuration/config.ini
+    networks:
+      green-network:
+        ipv4_address: 10.40.0.15
 
   bikeoperator1:
     build: ./sensors/bike_operator
@@ -143,6 +182,8 @@ services:
       - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=9UAPy4qDu16TQSUe4G9EN88rzsnC1srqrhgwu4Kxg9asMCxLdkCq_NgZzUp2gpnAfSj5W-XTzjeIUEsA23CiIw==
     volumes:
       - ./influx_db:/var/lib/influxdb2
+#    entrypoint: >
+#      bash -c "rm -rf /var/lib/influxdb2/* && /entrypoint.sh influxd"
     networks:
       green-network:
         ipv4_address: 10.40.0.6

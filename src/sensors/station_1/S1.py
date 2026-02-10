@@ -33,6 +33,13 @@ class ChargingStation:
         self.client.connect(HOST, PORT, 60)
         self.client.loop_start()
 
+    def send_slots(self):
+        payload = {
+            "slot": self.slots
+        }
+        print(f"Aggiornamento: Slot: {self.slots}")
+        self.client.publish(f"ebike/stations/{STATION_ID}/slots", json.dumps(payload))
+
     def on_connect(self, client, userdata, flags, rc):
         print("Connected with result code "+str(rc))
         self.client.subscribe(TOPIC_REQUEST)
@@ -55,18 +62,13 @@ class ChargingStation:
         elif type_request == "BALANCE":
             if self.slots[slot_id][0] == payload["bike_id"]:
                 self.slots[slot_id] = (self.slots[slot_id][0], payload["rate"])
-                self.send_slots()
+                s.send_slots()
 
-    def send_slots(self):
-        payload = {
-            "slot": self.slots
-        }
-        print(f"Aggiornamento: Slot: {self.slots}")
-        self.client.publish(f"ebike/stations/{STATION_ID}/slots", json.dumps(payload))
+
 
 if __name__ == "__main__":
     s = ChargingStation(STATION_ID)
-    time.sleep(10)
+    time.sleep(5)
     s.send_slots()
     while True:
         # just for keeping code active
