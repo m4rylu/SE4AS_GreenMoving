@@ -30,11 +30,15 @@ def plan_energy_waste(station_id):
     charging_list = []
     charged_list = []
 
+    if station_id not in stations:
+        return
+
     for slots in stations[station_id]:
         # 1. Identifichiamo le bici che hanno bisogno di carica (escludiamo empty e RESERVED)
         # Supponiamo: bike_id = slots[s][0], battery = slots[s][3] (come nel tuo esempio)
 
         bike_id=stations[station_id][slots][0]
+
         if bike_id in ["empty", "RESERVED"]:
             continue
 
@@ -103,9 +107,10 @@ def clean_old_tasks():
 def retrieve_station_knowledge():
     flux_query_station_loc = f'''
     from(bucket: "{BUCKET}")
-    |> range(start: -5m)
+    |> range(start: -1d)
     |> filter(fn: (r) => r["_measurement"] == "station_knowledge")
     |> last()
+    |> sort(columns: ["_time"], desc: false)
     |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
     '''
 
@@ -186,6 +191,7 @@ def retrieve_data_station():
       |> range(start: -1d)
       |> filter(fn: (r) => r["_measurement"] == "station")
       |> last()
+      |> sort(columns: ["_time"], desc: false)
       |> pivot(rowKey:["_time","station_id"], columnKey: ["_field"], valueColumn: "_value")
     '''
 
@@ -202,9 +208,10 @@ def retrieve_data_station():
 def retrieve_data_bike():
     flux_query_bikes = f'''
     from(bucket: "{BUCKET}")
-    |> range(start: -5m)
+    |> range(start: -1d)
     |> filter(fn: (r) => r["_measurement"] == "bikes")
     |> last()
+    |> sort(columns: ["_time"], desc: false)
     |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
 '''
     tables = query_api.query(query=flux_query_bikes, org=ORG)
@@ -219,14 +226,16 @@ def plan_bike_recharging():
 
     flux_query_event_bikes = f'''
     from(bucket: "{BUCKET}")
-      |> range(start: -5m)
+      |> range(start: -1d)
       |> filter(fn: (r) => r["_measurement"] == "bike_recharging")
       |> last()
+      |> sort(columns: ["_time"], desc: false)
       |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
     '''
 
     # BIKE PLANNING
     tables = query_api.query(query=flux_query_event_bikes, org=ORG)
+    new_max_time = last_processed_time_b
     if tables:
         for table in tables:
             for record in table.records:
@@ -267,16 +276,20 @@ def plan_bike_recharging():
                                 "timestamp": time.time()
                             }
 
-                last_processed_time_b = record.get_time()
+                    if record.get_time() > new_max_time:
+                        new_max_time = record.get_time()
+
+        last_processed_time_b = new_max_time
 
 def plan_structural_balance():
     global last_processed_time_s
 
     flux_query_event_station = f'''
     from(bucket: "{BUCKET}")
-      |> range(start: -5m)
+      |> range(start: -10d)
       |> filter(fn: (r) => r["_measurement"] == "structural_balance")
       |> last()
+      |> sort(columns: ["_time"], desc: false)
       |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
     '''
     # STATION PLANNING
@@ -355,7 +368,7 @@ def plan_structural_balance():
                     for slot in stations[station_id]:
                         if stations[station_id][slot][0] == "empty":
                             print(f"[PLANNING] Rebalancing: {bike_to_move[2]} -> {station_id} (Slot più libero: {slot})")
-                            point = Point("stations_rebalancing") \
+                            point = Point("plan_structural_balance") \
                                 .tag("bike_id", bike_to_move[2]) \
                                 .field("station_id_start", target_station) \
                                 .field("slot_start", target_slot) \
@@ -373,21 +386,26 @@ def retrieve_energy_waste_data():
     global last_processed_time_w
     flux_query_energy_waste = f'''
         from(bucket: "{BUCKET}")
-          |> range(start: -5m)
+          |> range(start: -1d)
           |> filter(fn: (r) => r["_measurement"] == "energy_waste")
           |> last()
+          |> sort(columns: ["_time"], desc: false)
           |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
         '''
     # STATION PLANNING
     tables = query_api.query(query=flux_query_energy_waste, org=ORG)
+    new_max_time = last_processed_time_w
     if tables:
         for table in tables:
             for record in table.records:
                 if record.get_time() > last_processed_time_w:
                     station_id = record.values.get("station_id")
                     plan_energy_waste(station_id)
-                    print("RECEIVED UPDATE EVENT")
-                    last_processed_time_w = record.get_time()
+                    print(f"RECEIVED UPDATE EVENT from {station_id}")
+                if record.get_time() > new_max_time:
+                    new_max_time = record.get_time()
+
+        last_processed_time_w = new_max_time
 
 
 def do_planning():
@@ -399,11 +417,10 @@ def do_planning():
     clean_old_tasks()
 
 if __name__ == "__main__":
-    time.sleep(10)
-
     client = InfluxDBClient(url=URL, token=TOKEN, org=ORG)
     query_api = client.query_api()
     write_api = client.write_api(write_options=SYNCHRONOUS)
+    time.sleep(15)
 
     retrieve_station_knowledge()
     while True:

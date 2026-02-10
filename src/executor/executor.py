@@ -47,12 +47,14 @@ def exec_structural_balance():
     global last_processed_time_bal
     flux_query_bikes_to_recharge = f'''
     from(bucket: "{BUCKET}")
-    |> range(start: -5m)
+    |> range(start: -30d)
     |> filter(fn: (r) => r["_measurement"] == "plan_structural_balance")
     |> last()
+    |> sort(columns: ["_time"], desc: false)
     |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
     '''
     tables = query_api.query(query=flux_query_bikes_to_recharge, org=ORG)
+    new_max_time = last_processed_time_bal
     if tables:
         record = tables[0].records[0]
         if record.get_time() > last_processed_time_bal:
@@ -86,19 +88,24 @@ def exec_structural_balance():
             }
             # avvisa l'operatore
             client_mqtt.publish(OPERATOR_TOPIC, json.dumps(payload))
-            last_processed_time_bal = record.get_time()
+            if record.get_time() > new_max_time:
+                new_max_time = record.get_time()
+
+        last_processed_time_bal = new_max_time
 
 def exec_bikes_recharging():
     global last_processed_time
     flux_query_bikes_to_recharge = f'''
         from(bucket: "{BUCKET}")
-        |> range(start: -5m)
+        |> range(start: -1d)
         |> filter(fn: (r) => r["_measurement"] == "plan_recharging")
         |> last()
+        |> sort(columns: ["_time"], desc: false)
         |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
         '''
 
     tables = query_api.query(query=flux_query_bikes_to_recharge, org=ORG)
+    new_max_time = last_processed_time
     if tables:
         for table in tables:
             for record in table.records:
@@ -124,20 +131,25 @@ def exec_bikes_recharging():
                     }
                     # avvisa l'operatore
                     client_mqtt.publish(OPERATOR_TOPIC, json.dumps(payload))
-                    last_processed_time = record.get_time()
+                    if record.get_time() > new_max_time:
+                        new_max_time = record.get_time()
+
+        last_processed_time = new_max_time
 
 # execute the charge balance for each station
 def exec_energy_waste():
     global last_processed_time_e
     flux_query_balance_charge = f'''
             from(bucket: "{BUCKET}")
-            |> range(start: -5m)
+            |> range(start: -1d)
             |> filter(fn: (r) => r["_measurement"] == "plan_energy_waste")
             |> last()
+            |> sort(columns: ["_time"], desc: false)
             |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
             '''
 
     tables = query_api.query(query=flux_query_balance_charge, org=ORG)
+    new_max_time = last_processed_time_e
     for table in tables:
         for record in table.records:
             if record.get_time() > last_processed_time_e:
@@ -165,20 +177,23 @@ def exec_energy_waste():
                 print(f"mando segnale a bici {bike_id} di caricare a {rate}")
                 # avvisa l'operatore
                 client_mqtt.publish(f"ebike/bikes/{bike_id}/commands", json.dumps(payload))
+                if record.get_time() > new_max_time:
+                    new_max_time = record.get_time()
 
-                last_processed_time_e = record.get_time()
+    last_processed_time_e = new_max_time
 
 def execute_bike_availability():
     global last_processed_time_a
     flux_query_available_bikes = f'''
                 from(bucket: "{BUCKET}")
-                |> range(start: -5m)
+                |> range(start: -1d)
                 |> filter(fn: (r) => r["_measurement"] == "bike_availability")
                 |> last()
                 |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
                 '''
 
     tables = query_api.query(query=flux_query_available_bikes, org=ORG)
+    new_max_time = last_processed_time_a
     if tables:
         for table in tables:
             for record in table.records:
@@ -197,8 +212,10 @@ def execute_bike_availability():
                         }
                         print(f"mando segnale a bici {bike_id} di non essere disponibile")
                         client_mqtt.publish(f"ebike/bikes/{bike_id}/commands", json.dumps(payload))
+                    if record.get_time() > new_max_time:
+                        new_max_time = record.get_time()
 
-                    last_processed_time_a = record.get_time()
+    last_processed_time_a = new_max_time
 
 
 
@@ -209,8 +226,6 @@ def execute():
     execute_bike_availability()
 
 if __name__ == "__main__":
-    time.sleep(15)
-
     client_db = InfluxDBClient(url=URL, token=TOKEN, org=ORG)
     query_api = client_db.query_api()
     write_api = client_db.write_api(write_options=SYNCHRONOUS)
@@ -218,6 +233,8 @@ if __name__ == "__main__":
     client_mqtt = mqtt.Client(client_id="Executor")
     client_mqtt.connect(HOST, PORT, 60)
     client_mqtt.loop_start()
+
+    time.sleep(15)
     while True:
         execute()
         time.sleep(UPDATE_RATE)

@@ -34,14 +34,13 @@ def structural_balance_goal():
       |> range(start: -30d)
       |> filter(fn: (r) => r["_measurement"] == "station")
       |> last()
+      |> sort(columns: ["_time"], desc: false)
       |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
     '''
     # STATION ANALYSIS
     tables = query_api.query(query=flux_query_stations, org=ORG)
     for table in tables:
         for record in table.records:
-            print("last_record", last_processed_time_s)
-            print("new_time", record.get_time())
             if record.get_time() > last_processed_time_s:
                 station_id = record.values.get("station_id")
                 slots = {}
@@ -81,6 +80,7 @@ def bike_availability_goal():
       |> range(start: -30d)
       |> filter(fn: (r) => r["_measurement"] == "bikes")
       |> last()
+      |> sort(columns: ["_time"], desc: false)
       |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
     '''
     # BIKES ANALYSIS
@@ -97,7 +97,7 @@ def bike_availability_goal():
 
 
             # verifico carica e disponibilità
-            if battery < AVAILABILITY_THRESHOLD and not is_charging and is_available:
+            if battery < AVAILABILITY_THRESHOLD and not is_charging:
                 point = Point("bike_recharging") \
                     .tag("bike_id", bike_id) \
                     .field("event", "LOW_BATTERY")
@@ -109,7 +109,7 @@ def bike_availability_goal():
                     .field("minutes", 0)
                 write_api.write(bucket=BUCKET, record=point)
 
-            elif battery >= AVAILABILITY_THRESHOLD and not is_available:
+            elif battery >= AVAILABILITY_THRESHOLD:
                 # stima max minuti disponibilità bici
                 available_minutes= int(battery*2.4)
                 point = Point("bike_availability") \
@@ -128,7 +128,7 @@ def bike_availability_goal():
             # verifico bici disponibile per prenotazione
             #if battery > 50 and is_available:
 
-            if battery == 100:
+            if battery == 100 and is_charging:
                 point = Point("bike_recharging") \
                     .tag("bike_id", bike_id) \
                     .field("event", "FULLY_CHARGED")
