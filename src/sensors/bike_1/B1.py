@@ -29,7 +29,7 @@ class Bike:
         self.id = bike_id
         self.lat = round(random.uniform(MIN_LAT, MAX_LAT),4)
         self.lon = round(random.uniform(MIN_LON,MAX_LON),4)
-        self.battery = random.randint(0, 10)
+        self.battery = random.randint(0, 100)
         self.motor_locked = True
         self.is_charging = False
         self.charge_rate = 0
