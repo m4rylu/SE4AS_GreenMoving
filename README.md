@@ -1,4 +1,5 @@
-# 📌 **GreenMoving**
+# 🚲 **GreenMoving**
+This project presents the design and implementation of a Self-Adaptive Management System for an urban E-Bike sharing service, orchestrated via Docker it integrates Python-based autonomous agents with InfluxDB for time-series data storage and Grafana for real-time observability. By leveraging a distributed architecture and a MAPE-K (Monitor-Analyze-Plan-Execute-Knowledge), the system autonomously manages e-bikes and smart charging stations.
 
 ## **System Architecture**
 <img src="doc/img/sub_system_view.png" width="500">

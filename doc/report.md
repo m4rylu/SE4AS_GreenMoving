@@ -1,13 +1,13 @@
 <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
 
-# 📌 **GreenMoving**
+# 🚲 **GreenMoving**
 
 **Version:** 1.0  
 **Last Update:** 02/11/2026
 
 ## 📖 **Project Description**
 ### **Introduction**
-This project is a Smart Mobility Monitoring System orchestrated via Docker. It integrates Python-based autonomous agents with InfluxDB for time-series data storage and Grafana for real-time observability.
+This project presents the design and implementation of a Self-Adaptive Management System for an urban E-Bike sharing service, orchestrated via Docker it integrates Python-based autonomous agents with InfluxDB for time-series data storage and Grafana for real-time observability. By leveraging a distributed architecture and a MAPE-K (Monitor-Analyze-Plan-Execute-Knowledge), the system autonomously manages e-bikes and smart charging stations.
 ### **Managed Resources**
 **Electric Bikes (E-Bikes)**
 The Bikes are the primary mobile assets, each unit is managed as an edge device providing real-time telemetry.
