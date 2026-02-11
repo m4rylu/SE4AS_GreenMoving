@@ -39,6 +39,7 @@ def structural_balance_goal():
     '''
     # STATION ANALYSIS
     tables = query_api.query(query=flux_query_stations, org=ORG)
+    new_max_time = last_processed_time_s
     for table in tables:
         for record in table.records:
             if record.get_time() > last_processed_time_s:
@@ -72,7 +73,10 @@ def structural_balance_goal():
 
                 write_api.write(bucket=BUCKET, record=point)
 
-                last_processed_time_s = record.get_time()
+                if record.get_time() > new_max_time:
+                    new_max_time = record.get_time()
+
+    last_processed_time_s = new_max_time
 
 def bike_availability_goal():
     flux_query_bikes = f'''

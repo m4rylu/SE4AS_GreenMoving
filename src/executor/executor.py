@@ -215,7 +215,7 @@ def execute_bike_availability():
                     if record.get_time() > new_max_time:
                         new_max_time = record.get_time()
 
-    last_processed_time_a = new_max_time
+        last_processed_time_a = new_max_time
 
 
 
