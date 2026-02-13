@@ -1,0 +1,7 @@
+# Node-RED runtime files
+src/nodered/data/node_modules/
+src/nodered/data/.npm/
+src/nodered/data/*.backup
+src/nodered/data/*.log
+src/nodered/data/.sessions.json
+src/nodered/data/flows_cred.json

@@ -1,0 +1,308 @@
+[
+    {
+        "id": "mape_tab",
+        "type": "tab",
+        "label": "Node-RED MAPE-K Manager",
+        "disabled": false,
+        "info": "MAPE-K autonomic manager for SE4AS GreenMoving project"
+    },
+    {
+        "id": "mqtt_broker_cfg",
+        "type": "mqtt-broker",
+        "name": "Mosquitto (mqtt-broker)",
+        "broker": "mqtt-broker",
+        "port": "1883"
+    },
+    {
+        "id": "7e35c47a80ab1d70",
+        "type": "influxdb",
+        "hostname": "127.0.0.1",
+        "port": 8086,
+        "protocol": "http",
+        "database": "database",
+        "name": "",
+        "usetls": false,
+        "tls": "",
+        "influxdbVersion": "2.0",
+        "url": "http://influxdb:8086",
+        "timeout": 10,
+        "rejectUnauthorized": true
+    },
+    {
+        "id": "mqtt_in",
+        "type": "mqtt in",
+        "z": "mape_tab",
+        "name": "Bike Telemetry In",
+        "topic": "ebike/bikes/+/telemetry",
+        "qos": "0",
+        "datatype": "utf8",
+        "broker": "mqtt_broker_cfg",
+        "nl": false,
+        "rap": false,
+        "inputs": 0,
+        "x": 80,
+        "y": 120,
+        "wires": [
+            [
+                "c342f91ced7242f6"
+            ]
+        ]
+    },
+    {
+        "id": "adapter_fn",
+        "type": "function",
+        "z": "mape_tab",
+        "name": "Adapter (Telemetry → Model)",
+        "func": "\nconst topic = msg.topic || \"\";\nconst m = topic.match(/^ebike\\/bikes\\/([^\\/]+)\\/telemetry$/);\nconst bikeId = m ? m[1] : \"unknown\";\n\nif (typeof msg.payload === \"string\") {\n  try {\n    msg.payload = JSON.parse(msg.payload);\n  } catch (e) {\n    return null; \n  }\n}\n\nconst t = msg.payload?.telemetry ?? null;\nif (!t || typeof t !== \"object\") return null;\n\nif (t.battery === undefined || t.lat === undefined || t.lon === undefined) return null;\n\nmsg.payload = {\n  id: bikeId,\n  battery: Number(t.battery),\n  motor_locked: !!t.motor_locked,\n  is_charging: !!t.is_charging,\n  is_available: !!t.is_available,\n  lat: Number(t.lat),\n  lon: Number(t.lon)\n};\n\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 440,
+        "y": 120,
+        "wires": [
+            [
+                "analyze_fn",
+                "e925a3b21224e183"
+            ]
+        ]
+    },
+    {
+        "id": "analyze_fn",
+        "type": "function",
+        "z": "mape_tab",
+        "name": "Analyze (Battery Rules)",
+        "func": "\nconst B_LOW = 20;\nconst B_RESET = 25;   \nconst B_FULL = 95;\n\nlet alerts = [];\nconst b = msg.payload.battery;\n\nif (b <= B_LOW && !msg.payload.is_charging) alerts.push(\"LOW_BATTERY\");\nif (b >= B_FULL && msg.payload.is_charging) alerts.push(\"CHARGED\");\n\nmsg._reset_low = (b >= B_RESET);\n\nmsg.alerts = alerts;\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 710,
+        "y": 120,
+        "wires": [
+            [
+                "plan_fn"
+            ]
+        ]
+    },
+    {
+        "id": "plan_fn",
+        "type": "function",
+        "z": "mape_tab",
+        "name": "Plan (with gating)",
+        "func": "\nconst id = msg.payload.id;\nlet cmds = [];\n\n// ---- LOW_BATTERY gating ----\nconst lowKey = `low_sent_${id}`;\nconst lowAlready = context.get(lowKey) || false;\n\nif (msg.alerts.includes(\"LOW_BATTERY\")) {\n  if (!lowAlready) {\n    cmds.push({\n      topic: `ebike/bikes/${id}/commands`,\n      payload: { request: \"CHARGE\", lat: 42.3540, lon: 13.3910 }\n    });\n    cmds.push({\n      topic: `ebike/bikes/${id}/commands`,\n      payload: { request: \"BALANCE\", rate: 5 }\n    });\n    context.set(lowKey, true);\n  }\n} else {\n  if (lowAlready && msg._reset_low) {\n    context.set(lowKey, false);\n  }\n}\n\n// ---- CHARGED gating ----\nconst chargedKey = `charged_sent_${id}`;\nconst chargedAlready = context.get(chargedKey) || false;\n\nif (msg.alerts.includes(\"CHARGED\")) {\n  if (!chargedAlready) {\n    cmds.push({\n      topic: `ebike/bikes/${id}/commands`,\n      payload: { request: \"AVAILABLE\" }\n    });\n    cmds.push({\n      topic: `ebike/bikes/${id}/commands`,\n      payload: { request: \"LOCK\" }\n    });\n    context.set(chargedKey, true);\n  }\n} else {\n  if (chargedAlready) {\n    context.set(chargedKey, false);\n  }\n}\n\nif (cmds.length === 0) return null;\n\nif (cmds.length === 0) return null;\n\nmsg.payload = cmds.map(c => ({\n  topic: c.topic,\n  payload: { ...c.payload, source: \"node-red\" }\n}));\n\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 970,
+        "y": 120,
+        "wires": [
+            [
+                "split_cmds"
+            ]
+        ]
+    },
+    {
+        "id": "split_cmds",
+        "type": "split",
+        "z": "mape_tab",
+        "name": "Split Commands",
+        "splt": "",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "",
+        "property": "payload",
+        "x": 1200,
+        "y": 120,
+        "wires": [
+            [
+                "2b68447b306660b2"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt_out",
+        "type": "mqtt out",
+        "z": "mape_tab",
+        "name": "Commands Out",
+        "topic": "",
+        "qos": "",
+        "retain": "",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "mqtt_broker_cfg",
+        "x": 1620,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "946e1993ed9a4963",
+        "type": "debug",
+        "z": "mape_tab",
+        "name": "debug 1",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 320,
+        "y": 220,
+        "wires": []
+    },
+    {
+        "id": "2b68447b306660b2",
+        "type": "function",
+        "z": "mape_tab",
+        "name": "function 1",
+        "func": "\n\nconst WINDOW_MS = 60 * 1000; // 60s (puedes bajar a 10s si quieres)\n\nif (!msg.payload || typeof msg.payload !== \"object\") return null;\n\n// Normalize\nconst outTopic = msg.payload.topic;\nconst outPayload = msg.payload.payload;\n\nif (!outTopic || !outPayload || !outPayload.request) {\n  return null;\n}\n\nmsg.topic = outTopic;\nmsg.payload = outPayload;\n\nconst key = `${msg.topic}|${msg.payload.request}`;\nconst now = Date.now();\n\nlet lastSent = context.get(\"lastSent\") || {};\nif (lastSent[key] && (now - lastSent[key]) < WINDOW_MS) {\n  return null; \n}\n\nlastSent[key] = now;\ncontext.set(\"lastSent\", lastSent);\n\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1420,
+        "y": 120,
+        "wires": [
+            [
+                "mqtt_out"
+            ]
+        ]
+    },
+    {
+        "id": "f425961f6a9c6061",
+        "type": "debug",
+        "z": "mape_tab",
+        "name": "debug 2",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 620,
+        "y": 280,
+        "wires": []
+    },
+    {
+        "id": "3ec9a10f87883a1a",
+        "type": "debug",
+        "z": "mape_tab",
+        "name": "debug 3",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 880,
+        "y": 280,
+        "wires": []
+    },
+    {
+        "id": "72eb9a2b78a383ea",
+        "type": "debug",
+        "z": "mape_tab",
+        "name": "debug 4",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1100,
+        "y": 220,
+        "wires": []
+    },
+    {
+        "id": "b88433f4f07b2059",
+        "type": "debug",
+        "z": "mape_tab",
+        "name": "debug 5",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1360,
+        "y": 220,
+        "wires": []
+    },
+    {
+        "id": "c342f91ced7242f6",
+        "type": "json",
+        "z": "mape_tab",
+        "name": "",
+        "property": "payload",
+        "action": "",
+        "pretty": false,
+        "x": 250,
+        "y": 120,
+        "wires": [
+            [
+                "adapter_fn"
+            ]
+        ]
+    },
+    {
+        "id": "d5ec45c629e2a2bd",
+        "type": "influxdb out",
+        "z": "mape_tab",
+        "influxdb": "7e35c47a80ab1d70",
+        "name": "",
+        "measurement": "",
+        "precision": "",
+        "retentionPolicy": "",
+        "database": "database",
+        "precisionV18FluxV20": "ms",
+        "retentionPolicyV18Flux": "",
+        "org": "GreenMoving",
+        "bucket": "bike_monitoring",
+        "x": 710,
+        "y": 200,
+        "wires": []
+    },
+    {
+        "id": "e925a3b21224e183",
+        "type": "function",
+        "z": "mape_tab",
+        "name": "function 2",
+        "func": "// Escribe en el measurement que Grafana ya está consultando:\nmsg.measurement = \"bikes\";\n\n// Bike id (el dashboard espera el tag bike_id)\nconst bikeId = String(msg.payload.id ?? msg.topic?.split(\"/\")[2] ?? \"unknown\");\n\n// Fields (valores)\nconst fields = {\n  battery: Number(msg.payload.battery),\n  lat: Number(msg.payload.lat),\n  lon: Number(msg.payload.lon),\n  is_available: Boolean(msg.payload.is_available),\n  is_charging: Boolean(msg.payload.is_charging),\n  motor_locked: Boolean(msg.payload.motor_locked),\n};\n\n// Tags (Grafana usa bike_id)\nconst tags = { bike_id: bikeId };\n\n// Formato correcto para node-red-contrib-influxdb: [fields, tags]\nmsg.payload = [fields, tags];\n\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 480,
+        "y": 200,
+        "wires": [
+            [
+                "d5ec45c629e2a2bd"
+            ]
+        ]
+    }
+]
