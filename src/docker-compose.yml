@@ -182,8 +182,6 @@ services:
       - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=9UAPy4qDu16TQSUe4G9EN88rzsnC1srqrhgwu4Kxg9asMCxLdkCq_NgZzUp2gpnAfSj5W-XTzjeIUEsA23CiIw==
     volumes:
       - ./influx_db:/var/lib/influxdb2
-    entrypoint: >
-      bash -c "rm -rf /var/lib/influxdb2/* && /entrypoint.sh influxd"
     networks:
       green-network:
         ipv4_address: 10.40.0.6
@@ -204,7 +202,8 @@ services:
         ipv4_address: 10.40.0.13
         
   node-red:
-    image: nodered/node-red:latest
+    build: ./nodered
+    container_name: node-red
     ports:
       - "1880:1880"
     volumes:

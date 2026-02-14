@@ -11,10 +11,18 @@
         "type": "mqtt-broker",
         "name": "Mosquitto (mqtt-broker)",
         "broker": "mqtt-broker",
-        "port": "1883"
+        "port": "1883",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": 4,
+        "keepalive": 15,
+        "cleansession": true,
+        "autoUnsubscribe": true,
+        "birthQos": "0",
+        "willQos": "0"
     },
     {
-        "id": "7e35c47a80ab1d70",
+        "id": "27cde33dc79afce2",
         "type": "influxdb",
         "hostname": "127.0.0.1",
         "port": 8086,
@@ -160,8 +168,8 @@
         "targetType": "full",
         "statusVal": "",
         "statusType": "auto",
-        "x": 320,
-        "y": 220,
+        "x": 240,
+        "y": 420,
         "wires": []
     },
     {
@@ -189,7 +197,7 @@
         "type": "debug",
         "z": "mape_tab",
         "name": "debug 2",
-        "active": false,
+        "active": true,
         "tosidebar": true,
         "console": false,
         "tostatus": false,
@@ -197,8 +205,8 @@
         "targetType": "full",
         "statusVal": "",
         "statusType": "auto",
-        "x": 620,
-        "y": 280,
+        "x": 580,
+        "y": 300,
         "wires": []
     },
     {
@@ -271,7 +279,7 @@
         "id": "d5ec45c629e2a2bd",
         "type": "influxdb out",
         "z": "mape_tab",
-        "influxdb": "7e35c47a80ab1d70",
+        "influxdb": "27cde33dc79afce2",
         "name": "",
         "measurement": "",
         "precision": "",
@@ -281,7 +289,7 @@
         "retentionPolicyV18Flux": "",
         "org": "GreenMoving",
         "bucket": "bike_monitoring",
-        "x": 710,
+        "x": 770,
         "y": 200,
         "wires": []
     },
@@ -290,7 +298,7 @@
         "type": "function",
         "z": "mape_tab",
         "name": "function 2",
-        "func": "// Escribe en el measurement que Grafana ya está consultando:\nmsg.measurement = \"bikes\";\n\n// Bike id (el dashboard espera el tag bike_id)\nconst bikeId = String(msg.payload.id ?? msg.topic?.split(\"/\")[2] ?? \"unknown\");\n\n// Fields (valores)\nconst fields = {\n  battery: Number(msg.payload.battery),\n  lat: Number(msg.payload.lat),\n  lon: Number(msg.payload.lon),\n  is_available: Boolean(msg.payload.is_available),\n  is_charging: Boolean(msg.payload.is_charging),\n  motor_locked: Boolean(msg.payload.motor_locked),\n};\n\n// Tags (Grafana usa bike_id)\nconst tags = { bike_id: bikeId };\n\n// Formato correcto para node-red-contrib-influxdb: [fields, tags]\nmsg.payload = [fields, tags];\n\nreturn msg;\n",
+        "func": "// Measurement que usa Grafana\nmsg.measurement = \"bikes\";\n\n// ----------- BIKE ID (tag) -----------\nlet bikeId = \"unknown\";\nif (msg.payload && msg.payload.id) {\n    bikeId = String(msg.payload.id);\n} else if (msg.topic) {\n    const parts = msg.topic.split(\"/\");\n    if (parts.length >= 3) bikeId = parts[2];\n}\n\n// ----------- Helpers -----------\nfunction toNumber(x, def = null) {\n    const n = Number(x);\n    return Number.isFinite(n) ? n : def;\n}\n\nfunction toBoolean(v) {\n    if (v === true || v === 1) return true;\n    if (typeof v === \"string\") return v.toLowerCase() === \"true\" || v === \"1\";\n    return false;\n}\n\n// ----------- Fields -----------\n// OJO: cambiamos el nombre del field a battery_pct para evitar conflicto de tipos\nconst fields = {\n    battery_pct: toNumber(msg.payload?.battery),   // <-- NUEVO FIELD\n    lat: toNumber(msg.payload?.lat),\n    lon: toNumber(msg.payload?.lon),\n    is_available: toBoolean(msg.payload?.is_available),\n    is_charging: toBoolean(msg.payload?.is_charging),\n    motor_locked: toBoolean(msg.payload?.motor_locked),\n};\n\n// Si no hay batería válida, no escribimos\nif (fields.battery_pct === null) return null;\n\n// ----------- Tags -----------\nconst tags = { bike_id: bikeId };\n\n// Formato correcto: [fields, tags]\nmsg.payload = [fields, tags];\n\nreturn msg;\n",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -303,6 +311,64 @@
             [
                 "d5ec45c629e2a2bd"
             ]
+        ]
+    },
+    {
+        "id": "3c55998b99474cf3",
+        "type": "debug",
+        "z": "mape_tab",
+        "name": "debug 6",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 420,
+        "y": 420,
+        "wires": []
+    },
+    {
+        "id": "b00082d84c1e97f9",
+        "type": "inject",
+        "z": "mape_tab",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 120,
+        "y": 360,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "c2b8eb079438be79",
+        "type": "catch",
+        "z": "mape_tab",
+        "name": "",
+        "scope": [
+            "d5ec45c629e2a2bd"
+        ],
+        "uncaught": false,
+        "x": 310,
+        "y": 280,
+        "wires": [
+            []
         ]
     }
 ]
