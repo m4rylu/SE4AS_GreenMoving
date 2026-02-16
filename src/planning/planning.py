@@ -22,6 +22,7 @@ bikes_history={}
 last_processed_time_b = datetime.fromtimestamp(0, timezone.utc)
 last_processed_time_s = datetime.fromtimestamp(0, timezone.utc)
 last_processed_time_w = datetime.fromtimestamp(0, timezone.utc)
+last_processed_time_w1 = datetime.fromtimestamp(0, timezone.utc)
 
 active_tasks = {}
 bikes = {}
@@ -407,14 +408,86 @@ def retrieve_energy_waste_data():
 
         last_processed_time_w = new_max_time
 
+def plan_bike_book():
+    global last_processed_time_w1
+    flux_query_book_bike = f'''
+            from(bucket: "{BUCKET}")
+              |> range(start: -1d)
+              |> filter(fn: (r) => r["_measurement"] == "book_bike")
+              |> last()
+              |> sort(columns: ["_time"], desc: false)
+              |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+            '''
+
+    tables = query_api.query(query=flux_query_book_bike, org=ORG)
+    new_max_time = last_processed_time_w1
+
+    if tables:
+        for table in tables:
+            for record in table.records:
+                if record.get_time() > last_processed_time_w1:
+                    bike_id = record.values.get("bike_id")
+                    event = record.values.get("event")
+
+                    if event == 'START':
+                        found_in_station = False
+
+                        # CICLO CORRETTO: stations[station_id][slot][0]
+                        for st_id in stations:
+                            for sl_id in stations[st_id]:
+                                # Accediamo all'elemento [0] che contiene il bike_id
+                                if stations[st_id][sl_id][0] == bike_id:
+                                    # Salviamo i riferimenti
+                                    actual_station = st_id
+                                    actual_slot = sl_id
+
+                                    # Liberiamo lo slot mettendo "empty" (o come lo gestisci tu)
+                                    stations[st_id][sl_id] = ("empty", 0)
+
+                                    # Scriviamo il log su Influx con i dati reali trovati
+                                    point = Point("plan_book_bike") \
+                                        .tag("bike_id", bike_id) \
+                                        .field("station_start", actual_station) \
+                                        .field("slot_start", actual_slot) \
+                                        .field("event", event)
+                                    write_api.write(bucket=BUCKET, record=point)
+
+                                    found_in_station = True
+                                    print(f"DEBUG: Bici {bike_id} rimossa da {actual_station} (slot {actual_slot})")
+                                    break  # Esci dai cicli slot
+                            if found_in_station: break  # Esci dai cicli stazioni
+
+                        if not found_in_station:
+                            # Caso in cui la bici non era in nessuna stazione registrata
+                            point = Point("plan_book_bike") \
+                                .tag("bike_id", bike_id) \
+                                .field("station_start", "not_found") \
+                                .field("slot_start", "none") \
+                                .field("event", event)
+                            write_api.write(bucket=BUCKET, record=point)
+                            print(f"DEBUG: Bici {bike_id} non trovata nei rack.")
+
+                    else:  # Caso EVENT == 'END'
+                        point = Point("plan_book_bike") \
+                            .tag("bike_id", bike_id) \
+                            .field("event", "END_RECOGNIZED")
+                        write_api.write(bucket=BUCKET, record=point)
+
+                if record.get_time() > new_max_time:
+                    new_max_time = record.get_time()
+
+        last_processed_time_w1 = new_max_time
+
+
 
 def do_planning():
+    clean_old_tasks()
     retrieve_data_station()
     retrieve_data_bike()
     retrieve_energy_waste_data()
+    plan_bike_book()
     plan_bike_recharging()
     plan_structural_balance()
-    clean_old_tasks()
 
 if __name__ == "__main__":
     client = InfluxDBClient(url=URL, token=TOKEN, org=ORG)

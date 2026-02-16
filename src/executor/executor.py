@@ -22,10 +22,9 @@ UPDATE_RATE = config.getint('update_rate', 'executor_update_rate')
 STATION_COMMAND_TOPIC = config.get('mqtt_topics', 'station_command_topic')
 OPERATOR_TOPIC = config.get('mqtt_topics', 'operator_topic')
 
-bikes = {}
-stations = {}
 last_processed_time= datetime.fromtimestamp(0, timezone.utc)
 last_processed_time_a= datetime.fromtimestamp(0, timezone.utc)
+last_processed_time_a1= datetime.fromtimestamp(0, timezone.utc)
 last_processed_time_e= datetime.fromtimestamp(0, timezone.utc)
 last_processed_time_bal= datetime.fromtimestamp(0, timezone.utc)
 
@@ -217,12 +216,57 @@ def execute_bike_availability():
 
         last_processed_time_a = new_max_time
 
+def exec_book_bikes():
+    global last_processed_time_a1
+    flux_query_book_bikes = f'''
+                   from(bucket: "{BUCKET}")
+                   |> range(start: -1d)
+                   |> filter(fn: (r) => r["_measurement"] == "plan_book_bike")
+                   |> last()
+                   |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+                   '''
+
+    tables = query_api.query(query=flux_query_book_bikes, org=ORG)
+    new_max_time = last_processed_time_a1
+    if tables:
+        for table in tables:
+            for record in table.records:
+                if record.get_time() > last_processed_time_a1:
+                    bike_id = record.values.get("bike_id")
+                    station_id = record.values.get("station_start")
+                    slot = record.values.get("slot_start")
+                    event = record.values.get("event")
+
+                    if event == "START":
+                        if station_id != "empty":
+                            payload = {
+                                "request": "DISCONNECT",
+                                "slot": slot
+                            }
+                            print(f"mando segnale a stazione {station_id} a {slot} di disconnettere bici")
+                            client_mqtt.publish(f"ebike/stations/{station_id}/request", json.dumps(payload))
+
+                        payload = {
+                            "request": "UNLOCK"
+                        }
+                        client_mqtt.publish(f"ebike/bikes/{bike_id}/commands", json.dumps(payload))
+
+                    else:
+                        payload = {
+                            "request": "LOCK"
+                        }
+                        print(f"mando segnale a bici {bike_id} di bloccarsi")
+                        client_mqtt.publish(f"ebike/bikes/{bike_id}/commands", json.dumps(payload))
+        last_processed_time_a1 = new_max_time
+
+
 
 
 def execute():
     exec_bikes_recharging()
     exec_energy_waste()
     exec_structural_balance()
+    exec_book_bikes()
     execute_bike_availability()
 
 if __name__ == "__main__":
@@ -234,7 +278,7 @@ if __name__ == "__main__":
     client_mqtt.connect(HOST, PORT, 60)
     client_mqtt.loop_start()
 
-    time.sleep(15)
+    time.sleep(20)
     while True:
         execute()
         time.sleep(UPDATE_RATE)

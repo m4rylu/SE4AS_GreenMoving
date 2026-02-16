@@ -33,7 +33,7 @@ class Bike:
         self.motor_locked = True
         self.is_charging = False
         self.charge_rate = 0
-        self.is_available = True if self.battery > BIKE_AVAILABILITY_TRESHOLD else False
+        self.is_available = False
 
         # Topic specifici
         self.telemetry_topic = f"ebike/bikes/{self.id}/telemetry"
@@ -79,7 +79,7 @@ class Bike:
 
         # 2. LOGICA USO
         elif not self.motor_locked:
-            self.battery -= 3
+            self.battery -= 5
             self.lat += random.uniform(-0.001, 0.001)
             self.lon += random.uniform(-0.001, 0.001)
             if self.battery <= BIKE_AVAILABILITY_TRESHOLD:
@@ -90,7 +90,7 @@ class Bike:
         elif self.motor_locked:
             if self.battery != 0:
                 self.battery -= 1
-            if self.battery <= 10:
+            if self.battery <= BIKE_AVAILABILITY_TRESHOLD:
                 self.is_available = False
 
         # 4. INVIO TELEMETRIA
@@ -112,6 +112,7 @@ class Bike:
 
 if __name__ == "__main__":
     bike = Bike(BIKE_ID)
+    print(f"AVAILABLE:TRESHOLD: {BIKE_AVAILABILITY_TRESHOLD}")
 
     while True:
         bike.update_state()

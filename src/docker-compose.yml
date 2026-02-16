@@ -92,6 +92,19 @@ services:
       green-network:
         ipv4_address: 10.40.0.11
 
+  user_1:
+    build: ./sensors/user_1
+    container_name: user1
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - mqtt-broker
+    volumes:
+      - ./configuration/config.ini:/app/configuration/config.ini
+    networks:
+      green-network:
+        ipv4_address: 10.40.0.17
+
   monitor:
     build: ./monitor
     container_name: monitor
