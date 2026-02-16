@@ -15,8 +15,7 @@ This project presents the design and implementation of a Self-Adaptive Managemen
 📂 nome_progetto
 ┣ 📂 src/        # source code
 ┣ 📂 docs/       # documentation
-┣ 📂 tests/      # Test unitari
-┣ 📄 README.md   # Documentazione principale
+┣ 📄 README.md 
 ```
 
 ## **Installation Steps**
