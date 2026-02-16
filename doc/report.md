@@ -13,6 +13,7 @@ This project presents the design and implementation of a Self-Adaptive Managemen
 The Bikes are the primary mobile assets, each unit is managed as an edge device providing real-time telemetry.
 - *State variables*: StateOfCharge, geographic coordinates (lat,lon), lock status, and availability.
 - *Management Logic**: System monitors these resources to ensur operational integrity and availability of bikes.
+- *Booking bikes logic*: A simulation of user has been integrated, this component acts as a random external environment, triggering changes that the system must perceive and manage autonomously.
 
 **Charging Stations**
 The Stations represent the fixed infrastructure and act as "hubs" for the bikes, each stations has the same number of slots. 
@@ -26,6 +27,7 @@ The Stations represent the fixed infrastructure and act as "hubs" for the bikes,
 Energy is treated as a finite, shared resource constrained by the station's maximum power capacity ($P_{tot}$).
 - *State Variable*: Power delivery per slot ($P_{i}$) and total station load.
 - *Monitoring Logic*: Instead of a static flow, energy is managed as a dynamic priority queue, the system "slices" the available power to maximize the number of fully charged bikes. This process is event-driven and balance is done only on stations updates.
+
 
 ### **Goals of the System**
 This system aims to optimize an e-bike sharing ecosystem through real-time bikes monitoring, intelligent power distribution, and event-based stations rebalancing.
@@ -43,6 +45,10 @@ $$\text{if } (\Delta lat > \epsilon \lor \Delta lon > \epsilon) \land \text{lock
 - **Critical State of Charge**
 Automated reporting for maintenance when the State of Charge ($SoC$) falls below the safety threshold:  
 $$\text{if } SoC < SoC_{threshold} \land \neg \text{charging}$$
+
+- **Availability**
+The system autonomously determines the if a bike is categorized as "Available" and bookable for the user,  when it meets specific constrain defined by the following formal logic:
+$$\text{Available} \iff (SoC > SoC_{threshold}) \land (\neg \text{is\_available}) \land (\neg \text{is\_booked})$$
 
 **Stations Load Balancing**
 To prevent "dead zones," the system maintains station occupancy within a functional buffer, ensuring that users can always find a bike to rent or an empty slot to return one. The occupancy $N_{occ}$ is constrained by the total capacity $C$:
@@ -115,7 +121,7 @@ The system interacts with the environment through three main entities using the 
   - `ebike/operators/events` subscriber
 
 #### **Monitor**
-he Monitor module acts as a bridge between the MQTT broker and the Time-Series Database (InfluxDB). It subscribes to telemetry and slot topics, persisting raw data into two primary measurements:
+The Monitor module acts as a bridge between the MQTT broker and the Time-Series Database (InfluxDB). It subscribes to telemetry and slot topics, persisting raw data into two primary measurements:
 
 `bikes`
 
@@ -128,6 +134,12 @@ he Monitor module acts as a bridge between the MQTT broker and the Time-Series D
 | station_id | slot1 | slot1_rate | slot2 | slot2_rate | slot3 | slot3_rate | slot4 | slot4_rate| slot5 | slot5_rate | 
 |--------|-------|------|------|------|------|------|-------|------|------|------|
 | S1 | B1 | 20 | empty | 0 | empty | 0 | empty | 0 | empty | 0 |
+
+`bookings`
+
+| bike_id | user_id | time_start | time_end | 
+|--------|-------|------|------|
+| B1 | U1 | 13/02/2026-18.30 | 13/02/2026-19.30 |
 
 #### **Analysis**
 The Analysis module queries the raw data and applies threshold-based logic to detect critical states, generating Events that require adaptation:
@@ -164,6 +176,15 @@ Monitors station occupancy
 |--------|
 | Theft alarm for Bike B1 |
 
+
+`book_bike` Calculates if a bike has to be locked or unlocked.
+
+| bike_id | event |
+|--------|-------|
+| B1 | START |
+| B2 | END |
+
+
 #### **Planning**
 The Planning module retrieves active events and calculates the optimal corrective actions using the system's optimization rules:
 
@@ -185,9 +206,17 @@ The Planning module retrieves active events and calculates the optimal correctiv
 |------|------|------|------|
 | S1 | slot2 | 10 | B1 |
 
+`plan_book_bike` Identifies if a bike to unlock is under charging  and if it's necessary update some station state.
+
+| bike_id | station_start | slot_start | event | 
+|--------|-------|--------|-------|
+| B1 | S1 | slot1 | START |
+
+
 #### **Executor**
 The Executor translates the high-level plans into actionable commands, dividing them into two execution paths:
 - *Direct Automated Control*: It sends BALANCE requests directly to the Station topic (ebike/stations/+/request) to adjust charging rates in real-time.
+- *Autonomous Lock State actuation*: The system performs autonomous physical security management by synchronizing the bike's locking mechanism with the rental lifecycle.
 - *Human-in-the-loop Simulation*: Since structural rebalancing and charging connections require physical movement, the Executor dispatches MOVE or CHARGE tasks to the Bike Operator via the operator topic. 
 
 <div style="page-break-after: always;"></div>
